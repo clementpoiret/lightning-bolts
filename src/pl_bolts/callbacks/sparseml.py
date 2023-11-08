@@ -14,8 +14,8 @@
 from typing import Any, Optional
 
 import torch
-from pytorch_lightning import Callback, LightningModule, Trainer
-from pytorch_lightning.utilities.exceptions import MisconfigurationException
+from lightning.pytorch import Callback, LightningModule, Trainer
+from lightning.fabric.utilities.exceptions import MisconfigurationException
 
 from pl_bolts.utils import _SPARSEML_AVAILABLE, _SPARSEML_TORCH_SATISFIED, _SPARSEML_TORCH_SATISFIED_ERROR
 
@@ -37,30 +37,38 @@ class SparseMLCallback(Callback):
     """
 
     def __init__(self, recipe_path: str) -> None:
+        super().__init__()
         if not _SPARSEML_AVAILABLE:
-            raise MisconfigurationException("SparseML has not be installed, install with pip install sparseml")
+            raise MisconfigurationException(
+                "SparseML has not be installed, install with pip install sparseml"
+            )
         if not _SPARSEML_TORCH_SATISFIED:
             raise MisconfigurationException(_SPARSEML_TORCH_SATISFIED_ERROR)
         self.manager = ScheduledModifierManager.from_yaml(recipe_path)
 
-    def on_fit_start(self, trainer: Trainer, pl_module: LightningModule) -> None:
+    def on_fit_start(self, trainer: Trainer,
+                     pl_module: LightningModule) -> None:
         optimizer = trainer.optimizers
 
         if len(optimizer) > 1:
-            raise MisconfigurationException("SparseML only supports training with one optimizer.")
+            raise MisconfigurationException(
+                "SparseML only supports training with one optimizer.")
         optimizer = optimizer[0]
         optimizer = self.manager.modify(
-            pl_module, optimizer, steps_per_epoch=trainer.estimated_stepping_batches, epoch=0
-        )
+            pl_module,
+            optimizer,
+            steps_per_epoch=trainer.estimated_stepping_batches,
+            epoch=0)
         trainer.optimizers = [optimizer]
 
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.manager.finalize(pl_module)
 
     @staticmethod
-    def export_to_sparse_onnx(
-        model: LightningModule, output_dir: str, sample_batch: Optional[torch.Tensor] = None, **export_kwargs: Any
-    ) -> None:
+    def export_to_sparse_onnx(model: LightningModule,
+                              output_dir: str,
+                              sample_batch: Optional[torch.Tensor] = None,
+                              **export_kwargs: Any) -> None:
         """Exports the model to ONNX format."""
         with model._prevent_trainer_and_dataloaders_deepcopy():
             exporter = ModuleExporter(model, output_dir=output_dir)
