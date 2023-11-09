@@ -14,10 +14,11 @@
 from typing import Any, Optional
 
 import torch
-from lightning.pytorch import Callback, LightningModule, Trainer
 from lightning.fabric.utilities.exceptions import MisconfigurationException
+from lightning.pytorch import Callback, LightningModule, Trainer
 
-from pl_bolts.utils import _SPARSEML_AVAILABLE, _SPARSEML_TORCH_SATISFIED, _SPARSEML_TORCH_SATISFIED_ERROR
+from pl_bolts.utils import (_SPARSEML_AVAILABLE, _SPARSEML_TORCH_SATISFIED,
+                            _SPARSEML_TORCH_SATISFIED_ERROR)
 
 if _SPARSEML_TORCH_SATISFIED:
     from sparseml.pytorch.optim import ScheduledModifierManager
@@ -48,18 +49,19 @@ class SparseMLCallback(Callback):
 
     def on_fit_start(self, trainer: Trainer,
                      pl_module: LightningModule) -> None:
-        optimizer = trainer.optimizers
-
-        if len(optimizer) > 1:
+        if len(trainer.strategy.optimizers) > 1:
             raise MisconfigurationException(
                 "SparseML only supports training with one optimizer.")
-        optimizer = optimizer[0]
+        optimizer = trainer.strategy.optimizers[0]
+
         optimizer = self.manager.modify(
             pl_module,
             optimizer,
             steps_per_epoch=trainer.estimated_stepping_batches,
             epoch=0)
-        trainer.optimizers = [optimizer]
+
+        trainer.strategy._optimizers = [optimizer]
+        trainer.strategy._lightning_optimizers[0]._optimizer = optimizer
 
     def on_fit_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         self.manager.finalize(pl_module)
